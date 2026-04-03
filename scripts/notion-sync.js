@@ -19,6 +19,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const REPO_LABEL = process.env.REPO_LABEL;
 
+// Page IDs to skip (belong to other repos)
+// Normalize: strip hyphens so both "abc123" and "abc-123" formats match
+const SKIP_PAGE_IDS = new Set(
+  (process.env.SKIP_PAGE_IDS?.split(',') || []).map((id) => id.replace(/-/g, ''))
+);
+
 // ---------------------------------------------------------------------------
 // Log helpers
 // ---------------------------------------------------------------------------
@@ -41,6 +47,7 @@ async function fetchPageTree(blockId, path = '') {
     });
     for (const block of res.results) {
       if (block.type === 'child_page') {
+        if (SKIP_PAGE_IDS.has(block.id.replace(/-/g, ''))) continue;
         const title = block.child_page.title;
         const fullPath = path ? `${path} > ${title}` : title;
         pages.push({ id: block.id, title, path: fullPath });
@@ -225,6 +232,7 @@ async function main() {
   }
   console.log('');
 
+  if (SKIP_PAGE_IDS.size) console.log(chalk.dim(`  Skipping page IDs: ${[...SKIP_PAGE_IDS].join(', ')}`));
   console.log(chalk.cyan('Fetching Notion page tree…'));
   const existingPages = await fetchPageTree(rootId);
   console.log(`  Found ${chalk.bold(existingPages.length)} pages:`);
