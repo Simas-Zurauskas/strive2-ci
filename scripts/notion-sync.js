@@ -110,12 +110,28 @@ async function fetchPageSummary(pageId, maxChars = 1500) {
   return text.trim();
 }
 
-function textBlock(content) {
-  return {
-    object: 'block',
-    type: 'paragraph',
-    paragraph: { rich_text: [{ type: 'text', text: { content } }] },
-  };
+const RICH_TEXT_LIMIT = 2000;
+
+/** Split a single rich_text element into chunks that fit within Notion's 2000-char limit. */
+function splitRichText(rt) {
+  const text = rt.text.content;
+  if (text.length <= RICH_TEXT_LIMIT) return [rt];
+  const chunks = [];
+  for (let i = 0; i < text.length; i += RICH_TEXT_LIMIT) {
+    chunks.push({ ...rt, text: { ...rt.text, content: text.slice(i, i + RICH_TEXT_LIMIT) } });
+  }
+  return chunks;
+}
+
+/** Ensure every block's rich_text stays within the 2000-char limit. */
+function enforceRichTextLimits(blocks) {
+  for (const block of blocks) {
+    const inner = block[block.type];
+    if (inner?.rich_text) {
+      inner.rich_text = inner.rich_text.flatMap(splitRichText);
+    }
+  }
+  return blocks;
 }
 
 function metaBlock(text) {
@@ -161,7 +177,7 @@ async function rewritePage(pageId, content) {
   } while (cursor);
 
   // Convert markdown to Notion blocks (preserves formatting)
-  const children = markdownToBlocks(sanitizeMarkdownLinks(content));
+  const children = enforceRichTextLimits(markdownToBlocks(sanitizeMarkdownLinks(content)));
   children.push(metaBlock(`Rewritten: ${changeMeta()}`));
 
   // Notion limits appending to 100 blocks at a time
@@ -174,15 +190,22 @@ async function rewritePage(pageId, content) {
 }
 
 async function createPage(parentId, title, content, linksTo = []) {
-  const children = [textBlock(content)];
+  const children = enforceRichTextLimits(markdownToBlocks(sanitizeMarkdownLinks(content)));
   if (linksTo.length > 0) children.push(metaBlock(`Related pages: ${linksTo.join(', ')}`));
   children.push(metaBlock(`Created: ${changeMeta()}`));
 
+  // Notion limits children to 100 blocks per call — create with first batch, append the rest
   const page = await notion.pages.create({
     parent: { page_id: parentId },
     properties: { title: { title: [{ type: 'text', text: { content: title } }] } },
-    children,
+    children: children.slice(0, 100),
   });
+  for (let i = 100; i < children.length; i += 100) {
+    await notion.blocks.children.append({
+      block_id: page.id,
+      children: children.slice(i, i + 100),
+    });
+  }
   return page.id;
 }
 
