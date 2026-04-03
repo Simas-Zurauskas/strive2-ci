@@ -89,7 +89,9 @@ function buildDocsBundle() {
 }
 
 async function prepare() {
+  const phaseStart = Date.now();
   console.log('Phase A: Prepare');
+  console.log(`  Repo root: ${REPO_ROOT}`);
 
   // 1. Fetch Notion docs
   console.log('  Fetching Notion documentation...');
@@ -102,7 +104,8 @@ async function prepare() {
   // 2. Generate manifest
   console.log('  Generating codebase manifest...');
   const manifest = generateManifest();
-  console.log(`  Manifest: ${manifest.split('\n').length} lines`);
+  const fileCount = (manifest.match(/\.tsx?$/gm) || []).length;
+  console.log(`  Manifest: ${manifest.split('\n').length} lines, ${fileCount} source files`);
 
   // 3. Read docs index
   let docsIndex = [];
@@ -110,12 +113,16 @@ async function prepare() {
     docsIndex = JSON.parse(fs.readFileSync(DOCS_INDEX_PATH, 'utf8'));
   }
   console.log(`  Docs index: ${docsIndex.length} pages`);
+  for (const doc of docsIndex) {
+    console.log(`    · ${doc.path} [${doc.id}]`);
+  }
 
   // 4. Build docs bundle
   console.log('  Bundling documentation...');
   const docsBundle = buildDocsBundle();
   console.log(`  Docs bundle: ${Math.round(docsBundle.length / 1024)}KB`);
 
+  console.log(`  Phase A completed in ${Math.round((Date.now() - phaseStart) / 1000)}s`);
   return { manifest, docsBundle, docsIndex };
 }
 
@@ -220,6 +227,7 @@ Omit tasks for pages that are already accurate — only include work that needs 
 }
 
 async function orchestrate(manifest, docsBundle, docsIndex) {
+  const phaseStart = Date.now();
   console.log('\nPhase B: Plan');
   console.log('  Running orchestrator agent...');
 
@@ -255,8 +263,10 @@ async function orchestrate(manifest, docsBundle, docsIndex) {
   console.log(`  Reasoning: ${plan.reasoning}`);
   console.log(`  Tasks: ${plan.tasks.length}`);
   for (const t of plan.tasks) {
-    console.log(`    [${t.priority}] ${t.action.padEnd(8)} ${t.section}`);
+    console.log(`    [P${t.priority}] ${t.action.padEnd(8)} ${t.section}${t.page_id ? ` [${t.page_id}]` : ''}`);
+    console.log(`         ${t.instructions.slice(0, 120)}${t.instructions.length > 120 ? '…' : ''}`);
   }
+  console.log(`  Phase B completed in ${Math.round((Date.now() - phaseStart) / 1000)}s`);
 
   return plan;
 }
@@ -548,7 +558,7 @@ function writeToNotion(results) {
 // Summary
 // ---------------------------------------------------------------------------
 
-function printSummary(plan, allWriteResults) {
+function printSummary(plan, allWriteResults, elapsed) {
   const succeeded = allWriteResults.filter((r) => r.status === 'success').length;
   const skipped = allWriteResults.filter((r) => r.status === 'skipped').length;
   const failed = allWriteResults.filter((r) => r.status === 'error').length;
@@ -560,6 +570,14 @@ function printSummary(plan, allWriteResults) {
   console.log(`Reasoning: ${plan.reasoning}`);
   console.log(`Tasks:     ${plan.tasks.length} planned`);
   console.log(`Results:   ${succeeded} succeeded, ${skipped} skipped, ${failed} failed`);
+  console.log(`Duration:  ${elapsed}s`);
+  if (failed > 0) {
+    console.log('');
+    console.log('Failures:');
+    for (const r of allWriteResults.filter((r) => r.status === 'error')) {
+      console.log(`  ✗ ${r.task_id}: ${r.error}`);
+    }
+  }
   console.log('='.repeat(60));
 }
 
@@ -582,6 +600,7 @@ async function main() {
   }
 
   // Phase C
+  const phaseCStart = Date.now();
   console.log('\nPhase C: Execute');
   const { independent, dependent } = partitionTasks(plan.tasks);
 
@@ -608,9 +627,10 @@ async function main() {
     allWriteResults.push(...depWriteLog);
   }
 
+  const phaseCElapsed = Math.round((Date.now() - phaseCStart) / 1000);
   const elapsed = Math.round((Date.now() - startTime) / 1000);
-  console.log(`\nCompleted in ${elapsed}s`);
-  printSummary(plan, allWriteResults);
+  console.log(`\n  Phase C completed in ${phaseCElapsed}s`);
+  printSummary(plan, allWriteResults, elapsed);
 }
 
 main().catch((err) => {

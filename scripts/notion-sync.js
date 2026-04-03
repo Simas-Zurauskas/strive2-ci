@@ -195,16 +195,36 @@ async function crosslinkPage(pageId, note) {
 // ---------------------------------------------------------------------------
 
 async function main() {
+  const startTime = Date.now();
   const rootId = process.env.NOTION_TECHNICAL_ROOT_ID;
   if (!rootId) throw new Error('NOTION_TECHNICAL_ROOT_ID is required');
 
+  // Log change context
+  const changedFiles = (process.env.CHANGED_FILES || '').split('\n').filter(Boolean);
   const diff = fs.readFileSync('/tmp/pr_diff.txt', 'utf8');
+  console.log('');
+  console.log(`Repository: ${process.env.REPO_NAME} (${REPO_LABEL})`);
+  console.log(`Trigger:    ${prRef()}: ${process.env.PR_TITLE}`);
+  console.log(`Author:     ${process.env.PR_AUTHOR}`);
+  console.log(`Changed:    ${changedFiles.length} files, ${Math.round(diff.length / 1024)}KB diff`);
+  if (changedFiles.length <= 15) {
+    for (const f of changedFiles) console.log(`  · ${f}`);
+  } else {
+    for (const f of changedFiles.slice(0, 10)) console.log(`  · ${f}`);
+    console.log(`  … and ${changedFiles.length - 10} more`);
+  }
+  console.log('');
 
   console.log('Fetching Notion page tree…');
   const existingPages = await fetchPageTree(rootId);
-  console.log(`Found ${existingPages.length} existing pages`);
+  console.log(`Found ${existingPages.length} pages:`);
+  for (const p of existingPages) {
+    console.log(`  · ${p.path}`);
+  }
 
-  console.log('Fetching page summaries…');
+  console.log('\nFetching page summaries…');
+  let summaryFailed = 0;
+  let summaryChars = 0;
   for (const page of existingPages) {
     try {
       const raw = await fetchPageSummary(page.id);
@@ -214,12 +234,14 @@ async function main() {
         .replace(/\s+/g, ' ')
         .trim()
         .slice(0, 800);
+      summaryChars += page.summary.length;
     } catch (err) {
+      summaryFailed++;
       console.warn(`  ⚠ Failed to fetch summary for "${page.title}": ${err.message}`);
       page.summary = '(summary unavailable)';
     }
   }
-  console.log('Page summaries fetched');
+  console.log(`Summaries fetched: ${existingPages.length - summaryFailed} OK, ${summaryFailed} failed (${Math.round(summaryChars / 1024)}KB total)`);
 
   const prompt = `You are a living documentation agent for this project.
 You are operating in the **${REPO_LABEL}** repository.
@@ -315,6 +337,7 @@ Respond ONLY in valid JSON (no markdown fences):
     `Prompt: ${Math.round(prompt.length / 1024)}KB, ${existingPages.length} pages, diff ${Math.round(diff.length / 1024)}KB`,
   );
   console.log('Asking Claude to assess documentation impact…');
+  const aiStart = Date.now();
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 16384,
@@ -322,7 +345,8 @@ Respond ONLY in valid JSON (no markdown fences):
   });
 
   const { usage } = response;
-  console.log(`Tokens: ${usage.input_tokens} in, ${usage.output_tokens} out`);
+  const aiElapsed = Math.round((Date.now() - aiStart) / 1000);
+  console.log(`Claude responded in ${aiElapsed}s — ${usage.input_tokens} in, ${usage.output_tokens} out`);
 
   let result;
   try {
@@ -403,12 +427,19 @@ Respond ONLY in valid JSON (no markdown fences):
   }
 
   // Summary
+  const elapsed = Math.round((Date.now() - startTime) / 1000);
+  const succeeded = log.filter((e) => e.status === '✓').length;
+  const failed = log.filter((e) => e.status === '✗').length;
+  const skipped = log.filter((e) => e.status === '⚠' || e.status === '?').length;
+
   console.log('\n' + '='.repeat(60));
   console.log('SYNC SUMMARY');
   console.log('='.repeat(60));
   console.log(`Change:    ${prRef()}: ${process.env.PR_TITLE}`);
   console.log(`Reasoning: ${result.reasoning}`);
-  console.log(`Actions:   ${log.length}`);
+  console.log(`Actions:   ${succeeded} succeeded, ${failed} failed, ${skipped} skipped`);
+  console.log(`Tokens:    ${usage.input_tokens} in, ${usage.output_tokens} out`);
+  console.log(`Duration:  ${elapsed}s (AI: ${aiElapsed}s)`);
   console.log('');
   for (const entry of log) {
     console.log(`  ${entry.status} ${entry.type.padEnd(10)} "${entry.page}" [${entry.id}]`);
