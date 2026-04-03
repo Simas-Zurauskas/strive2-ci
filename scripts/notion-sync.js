@@ -114,6 +114,7 @@ const RICH_TEXT_LIMIT = 2000;
 
 /** Split a single rich_text element into chunks that fit within Notion's 2000-char limit. */
 function splitRichText(rt) {
+  if (!rt.text?.content) return [rt]; // non-text types (equation, mention) — pass through
   const text = rt.text.content;
   if (text.length <= RICH_TEXT_LIMIT) return [rt];
   const chunks = [];
@@ -430,6 +431,7 @@ Respond ONLY in valid JSON (no markdown fences):
     try {
       switch (action.type) {
         case 'rewrite':
+          if (!action.content) throw new Error('Missing content for rewrite action');
           await rewritePage(action.page_id, action.content);
           log.push({
             status: 'ok',
@@ -440,6 +442,7 @@ Respond ONLY in valid JSON (no markdown fences):
           });
           break;
         case 'create': {
+          if (!action.content) throw new Error('Missing content for create action');
           const newId = await createPage(action.parent_id, action.title, action.content, action.links_to || []);
           log.push({ status: 'ok', type: action.type, page: label, id: newId, detail: `parent: ${action.parent_id}` });
           break;
