@@ -11,12 +11,12 @@ const DELAY_MS = 350; // stay under Notion's 3 req/s limit
 
 // Page IDs to skip entirely (belong to other repos)
 // Normalize: strip hyphens so both "abc123" and "abc-123" formats match
-const SKIP_PAGE_IDS = new Set(
-  (process.env.SKIP_PAGE_IDS?.split(',') || []).map((id) => id.replace(/-/g, ''))
+const SKIP_TECHNICAL_PAGE_IDS = new Set(
+  (process.env.SKIP_TECHNICAL_PAGE_IDS?.split(',') || []).map((id) => id.replace(/-/g, ''))
 );
 
-if (SKIP_PAGE_IDS.size) console.log(chalk.dim(`  Skipping page IDs: ${[...SKIP_PAGE_IDS].join(', ')}`));
-else console.warn(chalk.yellow('  ⚠ SKIP_PAGE_IDS is empty — all pages will be fetched'));
+if (SKIP_TECHNICAL_PAGE_IDS.size) console.log(chalk.dim(`  Skipping page IDs: ${[...SKIP_TECHNICAL_PAGE_IDS].join(', ')}`));
+else console.warn(chalk.yellow('  ⚠ SKIP_TECHNICAL_PAGE_IDS is empty — all pages will be fetched'));
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -36,7 +36,7 @@ async function fetchPageTree(blockId, pathSegments = []) {
     });
     for (const block of res.results) {
       if (block.type === 'child_page') {
-        if (SKIP_PAGE_IDS.has(block.id.replace(/-/g, ''))) continue;
+        if (SKIP_TECHNICAL_PAGE_IDS.has(block.id.replace(/-/g, ''))) continue;
         const title = block.child_page.title;
         const segments = [...pathSegments, title];
         pages.push({ id: block.id, title, path: segments.join(' > '), segments });

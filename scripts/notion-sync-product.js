@@ -413,7 +413,7 @@ async function main() {
     env: {
       ...process.env,
       NOTION_TECHNICAL_ROOT_ID: rootId,
-      SKIP_PAGE_IDS: '',
+      SKIP_TECHNICAL_PAGE_IDS: '',
       REPO_ROOT: path.resolve(SCRIPTS_DIR, '../..'),
     },
     stdio: 'inherit',
