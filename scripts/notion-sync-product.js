@@ -338,24 +338,53 @@ Respond ONLY in valid JSON (no markdown fences):
   console.log('');
   console.log(chalk.magenta('Asking Claude to assess product documentation impact…'));
   console.log(chalk.dim(`  Prompt: ${Math.round(prompt.length / 1024)}KB, ${existingPages.length} pages, diff ${Math.round(diff.length / 1024)}KB`));
-  const aiStart = Date.now();
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 16384,
-    messages: [{ role: 'user', content: prompt }],
-  });
 
-  const { usage } = response;
-  const aiElapsed = Math.round((Date.now() - aiStart) / 1000);
-  console.log(`  Responded in ${chalk.bold(`${aiElapsed}s`)} ${chalk.dim(`— ${usage.input_tokens} in, ${usage.output_tokens} out`)}`);
-
+  const MAX_RETRIES = 3;
   let result;
-  try {
-    const raw = response.content[0].text.replace(/```json|```/g, '').trim();
-    result = JSON.parse(raw);
-  } catch (err) {
-    console.error(chalk.red('Failed to parse Claude response:'), response.content[0].text.slice(0, 500));
-    throw new Error(`JSON parse error: ${err.message}`);
+  let usage;
+  let aiElapsed;
+  let messages = [{ role: 'user', content: prompt }];
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    const aiStart = Date.now();
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 16384,
+      messages,
+    });
+
+    usage = response.usage;
+    aiElapsed = Math.round((Date.now() - aiStart) / 1000);
+    console.log(`  Responded in ${chalk.bold(`${aiElapsed}s`)} ${chalk.dim(`— ${usage.input_tokens} in, ${usage.output_tokens} out`)}`);
+
+    if (response.stop_reason === 'max_tokens') {
+      console.warn(chalk.yellow(`  ⚠ Response truncated (hit max_tokens) — attempt ${attempt}/${MAX_RETRIES}`));
+      if (attempt < MAX_RETRIES) {
+        console.log(chalk.dim('  Retrying…'));
+        messages = [{ role: 'user', content: prompt }];
+        continue;
+      }
+      throw new Error('Claude response truncated (max_tokens) after all retries');
+    }
+
+    const rawText = response.content[0].text;
+    try {
+      const raw = rawText.replace(/```json|```/g, '').trim();
+      result = JSON.parse(raw);
+      break;
+    } catch (err) {
+      console.error(chalk.red(`  Parse error (attempt ${attempt}/${MAX_RETRIES}):`), rawText.slice(0, 500));
+      if (attempt < MAX_RETRIES) {
+        console.log(chalk.dim('  Retrying with error feedback…'));
+        messages = [
+          { role: 'user', content: prompt },
+          { role: 'assistant', content: rawText },
+          { role: 'user', content: `Your previous response was invalid JSON. Error: ${err.message}\nPlease respond again with ONLY valid JSON matching the required schema. Ensure all strings are properly escaped and the JSON is complete.` },
+        ];
+        continue;
+      }
+      throw new Error(`JSON parse error after ${MAX_RETRIES} attempts: ${err.message}`);
+    }
   }
 
   console.log(`  Meaningful: ${result.meaningful ? chalk.green('yes') : chalk.yellow('no')}`);
