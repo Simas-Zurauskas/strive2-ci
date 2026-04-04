@@ -31,12 +31,12 @@ jobs:
         working-directory: .ci-scripts/scripts
         run: npm install
 
-      - name: Rebuild documentation
+      - name: Rebuild technical documentation
         working-directory: .ci-scripts/scripts
         env:
           REPO_ROOT: ${{ github.workspace }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
           NOTION_TECHNICAL_ROOT_ID: ${{ secrets.NOTION_TECHNICAL_ROOT_ID }}
-          SKIP_PAGE_IDS: ${{ secrets.SKIP_PAGE_IDS }}
-        run: node rebuild-docs.js
+          SKIP_TECHNICAL_PAGE_IDS: ${{ secrets.SKIP_TECHNICAL_PAGE_IDS }}
+        run: node rebuild-docs-technical.js

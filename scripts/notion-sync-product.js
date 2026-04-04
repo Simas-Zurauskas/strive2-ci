@@ -3,7 +3,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { Client } = require('@notionhq/client');
 const { markdownToBlocks } = require('@tryfabric/martian');
 const chalk = require('chalk');
-const DOC_STANDARDS = require('./doc-standards');
+const DOC_STANDARDS = require('./doc-standards-product');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const notion = new Client({ auth: process.env.NOTION_API_KEY });
@@ -12,18 +12,12 @@ const DELAY_MS = 350; // stay under Notion's 3 req/s limit
 function sanitizeMarkdownLinks(markdown) {
   return markdown.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, text, url) => {
     if (/^https?:\/\//i.test(url)) return match;
-    return `\`${text}\``;
+    return text; // For product docs: just use the plain text, no backticks
   });
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const REPO_LABEL = process.env.REPO_LABEL;
-
-// Page IDs to skip (belong to other repos)
-// Normalize: strip hyphens so both "abc123" and "abc-123" formats match
-const SKIP_PAGE_IDS = new Set(
-  (process.env.SKIP_PAGE_IDS?.split(',') || []).map((id) => id.replace(/-/g, ''))
-);
 
 // ---------------------------------------------------------------------------
 // Log helpers
@@ -47,7 +41,6 @@ async function fetchPageTree(blockId, path = '') {
     });
     for (const block of res.results) {
       if (block.type === 'child_page') {
-        if (SKIP_PAGE_IDS.has(block.id.replace(/-/g, ''))) continue;
         const title = block.child_page.title;
         const fullPath = path ? `${path} > ${title}` : title;
         pages.push({ id: block.id, title, path: fullPath });
@@ -66,7 +59,6 @@ function richTextToPlain(richTexts) {
 }
 
 function blockToText(block) {
-  // Skip child_page blocks — they're navigation, not content
   if (block.type === 'child_page' || block.type === 'child_database') return '';
   const data = block[block.type];
   if (!data) return '';
@@ -112,9 +104,8 @@ async function fetchPageSummary(pageId, maxChars = 1500) {
 
 const RICH_TEXT_LIMIT = 2000;
 
-/** Split a single rich_text element into chunks that fit within Notion's 2000-char limit. */
 function splitRichText(rt) {
-  if (!rt.text?.content) return [rt]; // non-text types (equation, mention) — pass through
+  if (!rt.text?.content) return [rt];
   const text = rt.text.content;
   if (text.length <= RICH_TEXT_LIMIT) return [rt];
   const chunks = [];
@@ -124,7 +115,6 @@ function splitRichText(rt) {
   return chunks;
 }
 
-/** Ensure every block's rich_text stays within the 2000-char limit. */
 function enforceRichTextLimits(blocks) {
   for (const block of blocks) {
     const inner = block[block.type];
@@ -145,10 +135,6 @@ function metaBlock(text) {
   };
 }
 
-function divider() {
-  return { object: 'block', type: 'divider', divider: {} };
-}
-
 function prRef() {
   const num = process.env.PR_NUMBER;
   return num && num !== '0' ? `PR #${num}` : 'push';
@@ -163,7 +149,6 @@ function changeMeta() {
 // ---------------------------------------------------------------------------
 
 async function rewritePage(pageId, content) {
-  // Archive all existing blocks, then write fresh content
   let cursor;
   do {
     const res = await notion.blocks.children.list({ block_id: pageId, start_cursor: cursor, page_size: 100 });
@@ -177,11 +162,9 @@ async function rewritePage(pageId, content) {
     cursor = res.next_cursor;
   } while (cursor);
 
-  // Convert markdown to Notion blocks (preserves formatting)
   const children = enforceRichTextLimits(markdownToBlocks(sanitizeMarkdownLinks(content)));
   children.push(metaBlock(`Rewritten: ${changeMeta()}`));
 
-  // Notion limits appending to 100 blocks at a time
   for (let i = 0; i < children.length; i += 100) {
     await notion.blocks.children.append({
       block_id: pageId,
@@ -195,7 +178,6 @@ async function createPage(parentId, title, content, linksTo = []) {
   if (linksTo.length > 0) children.push(metaBlock(`Related pages: ${linksTo.join(', ')}`));
   children.push(metaBlock(`Created: ${changeMeta()}`));
 
-  // Notion limits children to 100 blocks per call — create with first batch, append the rest
   const page = await notion.pages.create({
     parent: { page_id: parentId },
     properties: { title: { title: [{ type: 'text', text: { content: title } }] } },
@@ -210,39 +192,19 @@ async function createPage(parentId, title, content, linksTo = []) {
   return page.id;
 }
 
-async function crosslinkPage(pageId, note) {
-  await notion.blocks.children.append({
-    block_id: pageId,
-    children: [
-      divider(),
-      {
-        object: 'block',
-        type: 'callout',
-        callout: {
-          rich_text: [{ type: 'text', text: { content: `Cross-repo update (${prRef()}): ${note}` } }],
-          icon: { type: 'emoji', emoji: '🔗' },
-          color: 'blue_background',
-        },
-      },
-      metaBlock(changeMeta()),
-    ],
-  });
-}
-
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
 async function main() {
   const startTime = Date.now();
-  const rootId = process.env.NOTION_TECHNICAL_ROOT_ID;
-  if (!rootId) throw new Error('NOTION_TECHNICAL_ROOT_ID is required');
+  const rootId = process.env.NOTION_PRODUCT_ROOT_ID;
+  if (!rootId) throw new Error('NOTION_PRODUCT_ROOT_ID is required');
 
-  // Log change context
   const changedFiles = (process.env.CHANGED_FILES || '').split('\n').filter(Boolean);
   const diff = fs.readFileSync('/tmp/pr_diff.txt', 'utf8');
   console.log('');
-  console.log(chalk.bold.cyan('KNOWLEDGE BASE SYNC'));
+  console.log(chalk.bold.magenta('PRODUCT DOCS SYNC'));
   console.log(separator());
   console.log(label('Repository:', `${process.env.REPO_NAME} ${chalk.dim(`(${REPO_LABEL})`)}`));
   console.log(label('Trigger:   ', `${prRef()}: ${process.env.PR_TITLE}`));
@@ -256,22 +218,20 @@ async function main() {
   }
   console.log('');
 
-  if (SKIP_PAGE_IDS.size) console.log(chalk.dim(`  Skipping page IDs: ${[...SKIP_PAGE_IDS].join(', ')}`));
-  console.log(chalk.cyan('Fetching Notion page tree…'));
+  console.log(chalk.magenta('Fetching Notion page tree…'));
   const existingPages = await fetchPageTree(rootId);
   console.log(`  Found ${chalk.bold(existingPages.length)} pages:`);
   for (const p of existingPages) {
-    console.log(`    ${chalk.cyan(p.title)} ${chalk.dim(p.path !== p.title ? `(${p.path})` : '')}`);
+    console.log(`    ${chalk.magenta(p.title)} ${chalk.dim(p.path !== p.title ? `(${p.path})` : '')}`);
   }
 
   console.log('');
-  console.log(chalk.cyan('Fetching page summaries…'));
+  console.log(chalk.magenta('Fetching page summaries…'));
   let summaryFailed = 0;
   let summaryChars = 0;
   for (const page of existingPages) {
     try {
       const raw = await fetchPageSummary(page.id);
-      // Sanitize: collapse whitespace, remove non-printable chars, trim length
       page.summary = raw
         .replace(/[\r\n]+/g, ' ')
         .replace(/\s+/g, ' ')
@@ -287,7 +247,7 @@ async function main() {
   const summaryOk = existingPages.length - summaryFailed;
   console.log(`  ${chalk.green(`${summaryOk} OK`)}${summaryFailed ? `, ${chalk.yellow(`${summaryFailed} failed`)}` : ''} ${chalk.dim(`(${Math.round(summaryChars / 1024)}KB total)`)}`);
 
-  const prompt = `You are a living documentation agent for this project.
+  const prompt = `You are a product documentation agent for Strive, an AI-powered learning platform.
 You are operating in the **${REPO_LABEL}** repository.
 
 ${DOC_STANDARDS.DOCUMENTATION_PHILOSOPHY}
@@ -303,14 +263,19 @@ ${DOC_STANDARDS.PAGE_STRUCTURE}
 ${DOC_STANDARDS.LINK_STANDARDS}
 
 DOCUMENTATION STRUCTURE
-All documentation lives in Notion under two top-level sections:
-- **Product** — manually curated vision, features, and strategy docs. NEVER modify these.
-- **Technical** — architecture, conventions, and implementation docs. This is your scope.
+You manage the "How Strive Works" section — product-level documentation that explains
+what the platform does, how features work, and the business logic behind them.
+These pages are read by everyone: developers, product managers, and leadership.
 
-The Technical section you can update (with current content summaries):
+CRITICAL: Your output must contain ZERO code references. No file paths, no function
+names, no API endpoints, no schema fields, no inline code backticks. Describe everything
+in plain language. If a code change adds a new validation step, write "the system now
+validates X before proceeding" — not "contentValidation.ts filters blocks with < 20 chars".
+
+The "How Strive Works" pages you can update (with current content summaries):
 ${existingPages.map((p) => `- "${p.title}" (${p.path}) [${p.id}]\n  Current content: ${p.summary || '(empty)'}`).join('\n\n') || '(empty — first sync)'}
 
-Technical root page ID: ${rootId}
+Root page ID: ${rootId}
 
 CHANGE CONTEXT
 Repository: ${process.env.REPO_NAME}
@@ -324,61 +289,54 @@ ${process.env.CHANGED_FILES}
 Diff (truncated):
 ${diff}
 
+ASSESSMENT CRITERIA
+Only update product docs when a change affects:
+- What a user sees or experiences (new UI, changed flow, new content type)
+- How a feature works (new business rule, changed behavior, new capability)
+- Business logic (scoring changes, scheduling changes, new gating rules)
+- System relationships (new feature that connects to existing ones)
+
+Do NOT update for:
+- Internal refactors that don't change behavior
+- Performance optimizations
+- Dependency updates
+- Code cleanup, middleware changes, schema field renames
+- Bug fixes (unless they change documented behavior)
+
 ACTIONS
 
-1. **rewrite** — PREFERRED for all changes. Replace the full content of an existing
-   page with corrected, up-to-date documentation. Always rewrite the complete page —
-   never append or patch. You have the page's current content in the summary above —
-   use it as the starting point and integrate the changes into a clean, consolidated version.
+1. **rewrite** — Replace the full content of an existing page with updated documentation.
+   Always rewrite the complete page — never append or patch. Use the page's current
+   content summary above as the starting point and integrate changes.
+   Remember: NO code references in the output.
 
-2. **create** — Create a new page only when the change introduces a concept, system,
-   or integration pattern that genuinely has no home in the existing structure.
-   Place it under the correct parent using parent_id from the tree above.
+2. **create** — Create a new page only when the change introduces a genuinely new
+   feature area that has no home in the existing structure.
 
-3. **crosslink** — Add a cross-reference note to a page when a change in this repo
-   has implications for documentation in another section (e.g., a client auth change
-   that affects the system-wide Authentication page).
-
-4. **skip** — If the change is trivial (dependency bump, formatting, minor CSS,
-   test-only, internal refactor that doesn't change public behavior or introduce
-   new patterns).
-
-HIERARCHY RULES
-- Changes to this repo's internals → under this repo's section in the tree
-- Changes to how repos communicate → under the system-wide section
-- Auth changes → system-wide auth page if cross-repo, repo-specific if isolated
-- New external service integration → system-wide or repo-specific depending on scope
-- Never create a page at root level unless it is a genuinely top-level concern
+3. **skip** — Most changes. Product docs only update when user-facing behavior changes.
 
 Respond ONLY in valid JSON (no markdown fences):
 {
   "meaningful": boolean,
-  "reasoning": "One sentence: your architectural assessment of this change's documentation impact",
+  "reasoning": "One sentence: your product-level assessment of whether this change affects what users experience or how features work",
   "actions": [
     {
       "type": "rewrite",
       "page_id": "id",
       "page_title": "title",
-      "content": "Complete replacement content for the page"
+      "content": "Complete replacement content — NO code references, written for a non-technical audience"
     },
     {
       "type": "create",
       "parent_id": "id",
       "title": "New Page Title",
-      "content": "Page content written as living documentation",
-      "links_to": ["related-page-id"]
-    },
-    {
-      "type": "crosslink",
-      "page_id": "id",
-      "page_title": "title",
-      "note": "What changed and why this section should know"
+      "content": "Page content — NO code references"
     }
   ]
 }`;
 
   console.log('');
-  console.log(chalk.cyan('Asking Claude to assess documentation impact…'));
+  console.log(chalk.magenta('Asking Claude to assess product documentation impact…'));
   console.log(chalk.dim(`  Prompt: ${Math.round(prompt.length / 1024)}KB, ${existingPages.length} pages, diff ${Math.round(diff.length / 1024)}KB`));
   const aiStart = Date.now();
   const response = await anthropic.messages.create({
@@ -404,27 +362,26 @@ Respond ONLY in valid JSON (no markdown fences):
   console.log(`  Reasoning:  ${chalk.italic(result.reasoning)}`);
 
   if (!result.meaningful || !result.actions?.length) {
-    console.log(chalk.dim('\nNo documentation updates needed.'));
+    console.log(chalk.dim('\nNo product documentation updates needed.'));
     return;
   }
 
-  // Validate page_ids against the fetched tree to catch hallucinated IDs
+  // Validate page_ids against the fetched tree
   const validIds = new Set(existingPages.map((p) => p.id));
   validIds.add(rootId);
 
   console.log('');
-  console.log(chalk.cyan(`Executing ${result.actions.length} action(s)…`));
+  console.log(chalk.magenta(`Executing ${result.actions.length} action(s)…`));
 
   const log = [];
 
   for (const action of result.actions) {
-    const label = action.page_title || action.title;
+    const actionLabel = action.page_title || action.title;
 
-    // Validate page_id / parent_id exists in the tree
     const targetId = action.page_id || action.parent_id;
     if (targetId && !validIds.has(targetId)) {
-      console.warn(chalk.yellow(`  ⚠ Skipping ${action.type} on "${label}": page_id ${targetId} not found in Notion tree`));
-      log.push({ status: 'warn', type: action.type, page: label, id: targetId, detail: 'Invalid page_id — not in tree' });
+      console.warn(chalk.yellow(`  ⚠ Skipping ${action.type} on "${actionLabel}": page_id ${targetId} not found in Notion tree`));
+      log.push({ status: 'warn', type: action.type, page: actionLabel, id: targetId, detail: 'Invalid page_id — not in tree' });
       continue;
     }
 
@@ -436,7 +393,7 @@ Respond ONLY in valid JSON (no markdown fences):
           log.push({
             status: 'ok',
             type: action.type,
-            page: label,
+            page: actionLabel,
             id: action.page_id,
             detail: `${action.content.length} chars`,
           });
@@ -444,33 +401,23 @@ Respond ONLY in valid JSON (no markdown fences):
         case 'create': {
           if (!action.content) throw new Error('Missing content for create action');
           const newId = await createPage(action.parent_id, action.title, action.content, action.links_to || []);
-          log.push({ status: 'ok', type: action.type, page: label, id: newId, detail: `parent: ${action.parent_id}` });
+          log.push({ status: 'ok', type: action.type, page: actionLabel, id: newId, detail: `parent: ${action.parent_id}` });
           break;
         }
-        case 'crosslink':
-          await crosslinkPage(action.page_id, action.note);
-          log.push({
-            status: 'ok',
-            type: action.type,
-            page: label,
-            id: action.page_id,
-            detail: action.note.slice(0, 120),
-          });
-          break;
         default:
-          log.push({ status: 'warn', type: action.type, page: label, id: '—', detail: 'Unknown action type' });
+          log.push({ status: 'warn', type: action.type, page: actionLabel, id: '—', detail: 'Unknown action type' });
           continue;
       }
-      console.log(`  ${chalk.green('✓')} ${chalk.bold(action.type)} "${label}"`);
+      console.log(`  ${chalk.green('✓')} ${chalk.bold(action.type)} "${actionLabel}"`);
     } catch (err) {
       log.push({
         status: 'error',
         type: action.type,
-        page: label,
+        page: actionLabel,
         id: action.page_id || action.parent_id,
         detail: err.message,
       });
-      console.log(`  ${chalk.red('✗')} ${chalk.bold(action.type)} "${label}" — ${chalk.red(err.message)}`);
+      console.log(`  ${chalk.red('✗')} ${chalk.bold(action.type)} "${actionLabel}" — ${chalk.red(err.message)}`);
     }
   }
 
@@ -482,7 +429,7 @@ Respond ONLY in valid JSON (no markdown fences):
 
   console.log('');
   console.log(separator());
-  console.log(chalk.bold('SYNC SUMMARY'));
+  console.log(chalk.bold('PRODUCT SYNC SUMMARY'));
   console.log(separator());
   console.log(label('Change:   ', `${prRef()}: ${process.env.PR_TITLE}`));
   console.log(label('Reasoning:', chalk.italic(result.reasoning)));
@@ -503,6 +450,6 @@ Respond ONLY in valid JSON (no markdown fences):
 }
 
 main().catch((err) => {
-  console.error(chalk.red.bold('Sync failed:'), err.message);
+  console.error(chalk.red.bold('Product sync failed:'), err.message);
   process.exit(1);
 });

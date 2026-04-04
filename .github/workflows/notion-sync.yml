@@ -60,13 +60,13 @@ jobs:
         working-directory: .ci-scripts/scripts
         run: npm install
 
-      - name: Sync documentation
+      - name: Sync technical documentation
         working-directory: .ci-scripts/scripts
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
           NOTION_TECHNICAL_ROOT_ID: ${{ secrets.NOTION_TECHNICAL_ROOT_ID }}
-          SKIP_PAGE_IDS: ${{ secrets.SKIP_PAGE_IDS }}
+          SKIP_TECHNICAL_PAGE_IDS: ${{ secrets.SKIP_TECHNICAL_PAGE_IDS }}
           PR_TITLE: ${{ steps.pr_info.outputs.pr_title }}
           PR_AUTHOR: ${{ steps.pr_info.outputs.pr_author }}
           PR_BODY: ${{ steps.pr_info.outputs.pr_body }}
@@ -74,4 +74,19 @@ jobs:
           PR_NUMBER: ${{ steps.pr_info.outputs.pr_number }}
           REPO_NAME: ${{ github.repository }}
           REPO_LABEL: ${{ github.event.repository.name }}
-        run: node notion-sync.js
+        run: node notion-sync-technical.js
+
+      - name: Sync product documentation
+        working-directory: .ci-scripts/scripts
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+          NOTION_PRODUCT_ROOT_ID: ${{ secrets.NOTION_PRODUCT_ROOT_ID }}
+          PR_TITLE: ${{ steps.pr_info.outputs.pr_title }}
+          PR_AUTHOR: ${{ steps.pr_info.outputs.pr_author }}
+          PR_BODY: ${{ steps.pr_info.outputs.pr_body }}
+          CHANGED_FILES: ${{ steps.pr_info.outputs.changed_files }}
+          PR_NUMBER: ${{ steps.pr_info.outputs.pr_number }}
+          REPO_NAME: ${{ github.repository }}
+          REPO_LABEL: ${{ github.event.repository.name }}
+        run: node notion-sync-product.js

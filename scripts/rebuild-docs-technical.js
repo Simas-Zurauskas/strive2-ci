@@ -16,7 +16,7 @@ const path = require('path');
 const { execSync } = require('child_process');
 const { query } = require('@anthropic-ai/claude-agent-sdk');
 const chalk = require('chalk');
-const DOC_STANDARDS = require('./doc-standards');
+const DOC_STANDARDS = require('./doc-standards-technical');
 
 const SCRIPTS_DIR = __dirname;
 const REPO_ROOT = process.env.REPO_ROOT || path.resolve(SCRIPTS_DIR, '../..');
