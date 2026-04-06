@@ -107,7 +107,7 @@ async function assess(docsOutline, diff, docsIndex = []) {
   const prompt = buildAssessPrompt(docsOutline, diff);
   console.log(chalk.dim(`  Prompt: ${Math.round(prompt.length / 1024)}KB`));
 
-  const plan = await invokeAgent({ prompt, schema: ASSESS_SCHEMA, 8 });
+  const plan = await invokeAgent({ prompt, schema: ASSESS_SCHEMA, maxTurns: 8 });
   const elapsed = Math.round((Date.now() - phaseStart) / 1000);
 
   if (!plan) {
