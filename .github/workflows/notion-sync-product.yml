@@ -3,13 +3,18 @@ name: "Knowledge Base: Sync Product"
 
 on:
   workflow_call:
+    inputs:
+      notion_root_id:
+        description: "Notion page ID that is the parent for synced product docs."
+        required: true
+        type: string
 
 jobs:
   sync-product:
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      FORCE_COLOR: '1'
+      FORCE_COLOR: "1"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -54,7 +59,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
 
       - name: Install sync dependencies
         working-directory: .ci-scripts/scripts
@@ -65,8 +70,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
-          NOTION_PRODUCT_ROOT_ID: ${{ secrets.NOTION_PRODUCT_ROOT_ID }}
-          NOTION_PRODUCT_ISSUES_PAGE_ID: ${{ secrets.NOTION_PRODUCT_ISSUES_PAGE_ID }}
+          NOTION_ROOT_ID: ${{ inputs.notion_root_id }}
           PR_TITLE: ${{ steps.pr_info.outputs.pr_title }}
           PR_AUTHOR: ${{ steps.pr_info.outputs.pr_author }}
           PR_BODY: ${{ steps.pr_info.outputs.pr_body }}

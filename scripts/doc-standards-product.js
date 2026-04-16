@@ -49,10 +49,33 @@ const WRITING_STANDARDS = `
   - Good: "The system generates clarifying questions based on the goal"
 `.trim();
 
+const VERIFICATION_RULES = `
+## Verification Rules
+
+Product documentation describes behavior in plain language, but the source of truth
+is the code. Every behavioral claim must be verified — not assumed, not inferred
+from naming conventions, not carried over from a scan summary.
+
+- **Trace every user flow through the code.** When documenting "the user signs up
+  with email and password," read the signup validation schema and controller. Note
+  exactly what fields are required and what errors can occur. Do not add fields
+  that the schema does not include.
+- **Verify every business rule against its source.** When documenting thresholds
+  (mastery tiers, XP values, intervals, level formulas), find the constant or logic
+  in the code and confirm the exact value. Do not round or paraphrase.
+- **Check what happens on failure, not just success.** When documenting a feature,
+  check what happens when validation fails or a prerequisite is not met. Document
+  the actual behavior, not the expected behavior.
+- **Verify UI claims against the component.** When writing "the dashboard shows a
+  90-day activity heatmap," read the component and check the actual date range.
+- **Enumerate, do not estimate.** When stating counts (question count, achievement
+  count, content block types), count the items in the source.
+`.trim();
+
 const QUALITY_CRITERIA = `
 ## Quality Criteria
 
-Every page must meet three standards:
+Every page must meet four standards:
 
 **COMPLETE** — All user-facing features and business rules in the documented
 scope are covered. Nothing a user would encounter is silently omitted.
@@ -64,6 +87,11 @@ should understand the product deeply without reading any code.
 **ACCESSIBLE** — Readable without any code knowledge. If a developer, a product
 manager, and a CEO all read this page, all three should find it useful. No
 unexplained jargon, no assumed technical knowledge.
+
+**VERIFIED** — Every feature description was verified by reading the source code
+that implements it. Every count, threshold, and interval was confirmed against the
+actual value in code. Every user flow was traced through the actual code path.
+See Verification Rules.
 `.trim();
 
 const PAGE_STRUCTURE = `
@@ -113,6 +141,7 @@ new information integrated — not a patch appended to the bottom.
 module.exports = {
   DOCUMENTATION_PHILOSOPHY,
   WRITING_STANDARDS,
+  VERIFICATION_RULES,
   QUALITY_CRITERIA,
   PAGE_STRUCTURE,
   LINK_STANDARDS,

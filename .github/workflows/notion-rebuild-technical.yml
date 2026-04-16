@@ -3,6 +3,11 @@ name: "Knowledge Base: Rebuild Technical"
 
 on:
   workflow_call:
+    inputs:
+      notion_root_id:
+        description: "Notion page ID that is the parent for rebuilt technical docs."
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -37,8 +42,6 @@ jobs:
           REPO_ROOT: ${{ github.workspace }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
-          NOTION_TECHNICAL_ROOT_ID: ${{ secrets.NOTION_TECHNICAL_ROOT_ID }}
-          SKIP_TECHNICAL_PAGE_IDS: ${{ secrets.SKIP_TECHNICAL_PAGE_IDS }}
-          NOTION_TECHNICAL_ISSUES_PAGE_ID: ${{ secrets.NOTION_TECHNICAL_ISSUES_PAGE_ID }}
+          NOTION_ROOT_ID: ${{ inputs.notion_root_id }}
           REPO_LABEL: ${{ github.event.repository.name }}
         run: node rebuild-docs-technical.js

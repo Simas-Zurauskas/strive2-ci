@@ -9,7 +9,7 @@
  *                      then sequential Notion write pass applies changes
  *
  * Usage:
- *   ANTHROPIC_API_KEY=... NOTION_API_KEY=... NOTION_PRODUCT_ROOT_ID=... node rebuild-docs-product.js
+ *   ANTHROPIC_API_KEY=... NOTION_API_KEY=... NOTION_ROOT_ID=... node rebuild-docs-product.js
  */
 
 const fs = require('fs');
@@ -141,12 +141,23 @@ the code but must describe everything in plain language.
   (action: 'rewrite') that depends_on the children
 - STRONGLY prefer rewriting existing pages over creating new ones.
 
+## Coverage check
+
+After drafting your task list, verify that every major user-facing feature has
+corresponding documentation. Cross-reference the codebase manifest against the existing
+docs outline. If a significant feature area (authentication, course creation, lessons,
+quizzes, gamification, dashboard, etc.) has no page or section, plan a task for it.
+
 ## Instructions field
 
 The instructions you write for each task are the worker agent's primary guidance.
 Be specific about WHAT to document and WHAT to verify. The worker has Read, Glob,
 and Grep tools and will explore the codebase itself to find the relevant files.
 You do NOT need to specify file paths — the worker will discover them.
+
+Include specific verification instructions: "Verify the exact number of wizard steps
+by reading the screen component. Check the mastery tier thresholds against the constants.
+Confirm what happens when a user tries to sign in with an unverified email."
 
 CRITICAL: Remind workers in every task instruction that output must contain NO code
 references — no file paths, function names, endpoints, schema fields, or backticks.
@@ -174,7 +185,7 @@ ${docsOutline}
 ${JSON.stringify(docsIndex, null, 2)}
 
 ### PRODUCT ROOT PAGE ID
-${process.env.NOTION_PRODUCT_ROOT_ID}
+${process.env.NOTION_ROOT_ID}
 
 ## Output
 
@@ -268,6 +279,8 @@ ${manifest}
 4. Write complete documentation based on what you find in the code
 
 ${DOC_STANDARDS.WRITING_STANDARDS}
+
+${DOC_STANDARDS.VERIFICATION_RULES}
 
 ${DOC_STANDARDS.QUALITY_CRITERIA}
 

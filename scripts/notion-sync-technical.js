@@ -24,7 +24,7 @@ const ASSESS_SCHEMA = assessSchema(['rewrite', 'create', 'crosslink']);
 // ---------------------------------------------------------------------------
 
 function buildAssessPrompt(docsOutline, diff) {
-  const rootId = process.env.NOTION_TECHNICAL_ROOT_ID;
+  const rootId = process.env.NOTION_ROOT_ID;
 
   return `You are a living documentation agent for this project.
 You are operating in the **${REPO_LABEL}** repository.
@@ -95,6 +95,12 @@ HIERARCHY RULES
 - New external service integration → system-wide or repo-specific depending on scope
 - Never create a page at root level unless it is a genuinely top-level concern
 
+CROSS-SECTION AWARENESS
+When a change affects user-facing behavior (not just internal code), consider whether the
+product documentation ("How Strive Works" section) also needs updating. Use the crosslink
+action to flag this — the product sync runs separately but your crosslink note helps
+maintain consistency between technical and product docs.
+
 For each action, write detailed instructions explaining:
 - What changed in the code and why it matters for documentation
 - Which sections of the page need updating
@@ -159,6 +165,8 @@ ${pageContent || '(No existing documentation — write from scratch)'}
 ${diff}
 
 ${DOC_STANDARDS.WRITING_STANDARDS}
+
+${DOC_STANDARDS.VERIFICATION_RULES}
 
 ${DOC_STANDARDS.QUALITY_CRITERIA}
 
@@ -234,8 +242,8 @@ async function generate(actions, docsIndex, diff) {
 
 async function main() {
   const startTime = Date.now();
-  const rootId = process.env.NOTION_TECHNICAL_ROOT_ID;
-  if (!rootId) throw new Error('NOTION_TECHNICAL_ROOT_ID is required');
+  const rootId = process.env.NOTION_ROOT_ID;
+  if (!rootId) throw new Error('NOTION_ROOT_ID is required');
 
   const changedFiles = (process.env.CHANGED_FILES || '').split('\n').filter(Boolean);
   const diff = fs.readFileSync('/tmp/pr_diff.txt', 'utf8');
@@ -259,7 +267,7 @@ async function main() {
   console.log(chalk.cyan('Fetching documentation from Notion…'));
   execSync(`node ${path.join(SCRIPTS_DIR, 'fetch-notion-docs.js')}`, {
     cwd: SCRIPTS_DIR,
-    env: { ...process.env, NOTION_TECHNICAL_ROOT_ID: rootId, REPO_ROOT },
+    env: { ...process.env, REPO_ROOT },
     stdio: 'inherit',
   });
 

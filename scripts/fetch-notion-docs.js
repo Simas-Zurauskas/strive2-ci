@@ -10,15 +10,6 @@ const DOCS_DIR = process.env.REPO_ROOT
   : path.resolve(__dirname, '../../_docs');
 const DELAY_MS = 350; // stay under Notion's 3 req/s limit
 
-// Page IDs to skip entirely (belong to other repos)
-// Normalize: strip hyphens so both "abc123" and "abc-123" formats match
-const SKIP_TECHNICAL_PAGE_IDS = new Set(
-  (process.env.SKIP_TECHNICAL_PAGE_IDS?.split(',') || []).map((id) => id.replace(/-/g, ''))
-);
-
-if (SKIP_TECHNICAL_PAGE_IDS.size) console.log(chalk.dim(`${indent.L1}Skipping page IDs: ${[...SKIP_TECHNICAL_PAGE_IDS].join(', ')}`));
-else console.warn(chalk.yellow(`${indent.L1}${'⚠'} SKIP_TECHNICAL_PAGE_IDS is empty — all pages will be fetched`));
-
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---------------------------------------------------------------------------
@@ -37,7 +28,6 @@ async function fetchPageTree(blockId, pathSegments = []) {
     });
     for (const block of res.results) {
       if (block.type === 'child_page') {
-        if (SKIP_TECHNICAL_PAGE_IDS.has(block.id.replace(/-/g, ''))) continue;
         const title = block.child_page.title;
         const segments = [...pathSegments, title];
         pages.push({ id: block.id, title, path: segments.join(' > '), segments });
@@ -182,8 +172,8 @@ async function fetchPageContent(pageId) {
 
 async function main() {
   const startTime = Date.now();
-  const rootId = process.env.NOTION_TECHNICAL_ROOT_ID;
-  if (!rootId) throw new Error('NOTION_TECHNICAL_ROOT_ID is required');
+  const rootId = process.env.NOTION_ROOT_ID;
+  if (!rootId) throw new Error('NOTION_ROOT_ID is required');
 
   // Clean and create output directory
   if (fs.existsSync(DOCS_DIR)) fs.rmSync(DOCS_DIR, { recursive: true });

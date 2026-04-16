@@ -8,7 +8,7 @@
  *                      then sequential Notion write pass applies changes
  *
  * Usage:
- *   ANTHROPIC_API_KEY=... NOTION_API_KEY=... NOTION_TECHNICAL_ROOT_ID=... node rebuild-docs.js
+ *   ANTHROPIC_API_KEY=... NOTION_API_KEY=... NOTION_ROOT_ID=... node rebuild-docs.js
  */
 
 const fs = require('fs');
@@ -132,12 +132,23 @@ ${DOC_STANDARDS.DOCUMENTATION_PHILOSOPHY}
 - For 'split': create separate child tasks (action: 'create') and one parent task
   (action: 'rewrite') that depends_on the children
 
+## Coverage check
+
+After drafting your task list, verify that every major subsystem in the codebase has
+corresponding documentation. Cross-reference the codebase manifest against the existing
+docs outline. If a significant feature area (authentication, course creation, lesson
+generation, quizzes, gamification, etc.) has no page or section, plan a task for it.
+
 ## Instructions field
 
 The instructions you write for each task are the worker agent's primary guidance.
 Be specific about WHAT to document and WHAT to verify. The worker has Read, Glob,
 and Grep tools and will explore the codebase itself to find the relevant files.
 You do NOT need to specify file paths — the worker will discover them.
+
+Include specific verification instructions: "Verify the exact count of endpoints by
+reading the route file. Check for conditional behavior in the delete-account flow.
+Confirm the mastery tier thresholds against the constants file."
 
 Good: "Document all custom hooks in src/hooks/. For each hook, cover its signature,
 return type, dependencies, and usage patterns. Verify the useAuth hook's token
@@ -161,7 +172,7 @@ ${docsOutline}
 ${JSON.stringify(docsIndex, null, 2)}
 
 ### TECHNICAL ROOT PAGE ID
-${process.env.NOTION_TECHNICAL_ROOT_ID}
+${process.env.NOTION_ROOT_ID}
 
 ## Output
 
@@ -252,6 +263,8 @@ ${manifest}
 4. Write complete documentation based on what you find in the code
 
 ${DOC_STANDARDS.WRITING_STANDARDS}
+
+${DOC_STANDARDS.VERIFICATION_RULES}
 
 ${DOC_STANDARDS.QUALITY_CRITERIA}
 

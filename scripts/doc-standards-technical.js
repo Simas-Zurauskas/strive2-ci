@@ -41,10 +41,31 @@ const WRITING_STANDARDS = `
 - Technical, direct, professional tone
 `.trim();
 
+const VERIFICATION_RULES = `
+## Verification Rules
+
+Documentation errors most often come from writing what you expect the code to do
+rather than what it actually does. These rules make verification a process step.
+
+- **Counts must be enumerated.** When stating a number (endpoint count, hook count,
+  model field count), enumerate the items in the source file and count them. Do not
+  estimate from memory or round.
+- **Flows must be traced.** When describing a multi-step process (auth flow, job
+  lifecycle, generation pipeline), trace each step through the actual code path —
+  function by function, file by file. Do not describe what you assume happens.
+- **Conditional branches must be checked.** When describing behavior, check for
+  if/else, role checks, and environment-dependent logic. Document the conditions,
+  not just the happy path.
+- **Lists must be exhaustive.** When listing items from a source file (exported hooks,
+  model fields, enum values), read the file and include every item. If a table is
+  intentionally selective, say "Key hooks include…" rather than presenting it as
+  the full list.
+`.trim();
+
 const QUALITY_CRITERIA = `
 ## Quality Criteria
 
-Every page must meet three standards:
+Every page must meet four standards:
 
 **COMPLETE** — All public functions, hooks, components, routes, endpoints, and
 models in the documented scope are covered. Nothing significant is silently omitted.
@@ -57,15 +78,21 @@ what the code does but why it was built this way.
 matches the actual code. If you have not verified it by reading the source, do not
 write it. If something is unclear from the codebase alone, note it explicitly rather
 than guessing.
+
+**VERIFIED** — Every count was produced by enumerating source items, not estimating.
+Every flow was traced through the actual code path. Every behavioral claim was
+checked for conditional branches. See Verification Rules.
 `.trim();
 
 const PAGE_STRUCTURE = `
 ## Page Structure
 
-Each documentation page should include the following sections where applicable.
-Not every page needs every section — omit sections that would be empty or forced.
+Each documentation page should include the following sections. Purpose is mandatory;
+other sections should be included where applicable — omit sections that would be
+empty or forced.
 
-- **Purpose** — One paragraph explaining what this part of the system does and why it exists.
+- **Purpose** (mandatory) — One paragraph explaining what this part of the system does
+  and why it exists. Always use an explicit ## Purpose heading.
 - **How it works** — Core technical content. The meat of the page.
 - **Key files** — Table of file paths with one-line descriptions.
 - **Integration points** — How this connects to other parts of the system. Links to relevant pages.
@@ -109,6 +136,7 @@ new information integrated — not a patch appended to the bottom.
 module.exports = {
   DOCUMENTATION_PHILOSOPHY,
   WRITING_STANDARDS,
+  VERIFICATION_RULES,
   QUALITY_CRITERIA,
   PAGE_STRUCTURE,
   LINK_STANDARDS,

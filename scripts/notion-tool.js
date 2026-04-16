@@ -10,7 +10,7 @@
  *   node notion-tool.js rename <page_id> "<new_title>"
  *
  * Markdown files are converted to Notion blocks automatically.
- * Requires NOTION_API_KEY and NOTION_TECHNICAL_ROOT_ID env vars.
+ * Requires NOTION_API_KEY and NOTION_ROOT_ID env vars.
  */
 
 const fs = require('fs');
@@ -63,8 +63,8 @@ function normalizeTableBlocks(blocks) {
 // ---------------------------------------------------------------------------
 
 async function listPages() {
-  const rootId = process.env.NOTION_TECHNICAL_ROOT_ID;
-  if (!rootId) throw new Error('NOTION_TECHNICAL_ROOT_ID is required');
+  const rootId = process.env.NOTION_ROOT_ID;
+  if (!rootId) throw new Error('NOTION_ROOT_ID is required');
 
   const pages = [];
   async function walk(blockId, path = '') {
